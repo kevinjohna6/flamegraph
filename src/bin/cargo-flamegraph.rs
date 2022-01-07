@@ -10,9 +10,10 @@ use flamegraph::Workload;
 #[derive(Parser, Debug)]
 #[clap(name = "cargo-flamegraph", version)]
 struct Opt {
-    /// Build with the dev profile
+    /// Cargo profile to build with.
+    /// Cargo has 4 built-in profiles: dev, release, test, and bench.
     #[clap(long)]
-    dev: bool,
+    profile: Option<String>,
 
     /// package with the binary to run
     #[clap(short, long)]
@@ -64,20 +65,9 @@ fn build(opt: &Opt, kind: impl IntoIterator<Item = String>) -> anyhow::Result<Ve
     use std::process::{Command, Output, Stdio};
     let mut cmd = Command::new("cargo");
 
-    // This will build benchmarks with the `bench` profile. This is needed
-    // because the `--profile` argument for `cargo build` is unstable.
-    if !opt.dev && opt.bench.is_some() {
-        cmd.args(&["bench", "--no-run"]);
-    } else if opt.unit_test.is_some() {
-        cmd.args(&["test", "--no-run"]);
-    } else {
-        cmd.arg("build");
-    }
-
-    // do not use `--release` when we are building for `bench`
-    if !opt.dev && opt.bench.is_none() {
-        cmd.arg("--release");
-    }
+    cmd.arg("build");
+    cmd.arg("--profile");
+    cmd.arg(opt.profile.as_ref().unwrap());
 
     if let Some(ref package) = opt.package {
         cmd.arg("--package");
@@ -158,15 +148,10 @@ fn workload(opt: &Opt, artifacts: &[Artifact]) -> anyhow::Result<Vec<String>> {
 
     let (kind, target): (&[&str], _) = match opt {
         Opt { bin: Some(t), .. } => (&["bin"], t),
-        Opt {
-            example: Some(t), ..
-        } => (&["example"], t),
+        Opt { example: Some(t), .. } => (&["example"], t),
         Opt { test: Some(t), .. } => (&["test"], t),
         Opt { bench: Some(t), .. } => (&["bench"], t),
-        Opt {
-            unit_test: Some(Some(t)),
-            ..
-        } => (&["lib", "bin"], t),
+        Opt { unit_test: Some(Some(t)), .. } => (&["lib", "bin"], t),
         _ => return Err(anyhow!("no target for profiling")),
     };
 
@@ -195,18 +180,12 @@ fn workload(opt: &Opt, artifacts: &[Artifact]) -> anyhow::Result<Vec<String>> {
         })?;
 
     const NONE: u32 = 0;
-    if !opt.dev && debug_level.unwrap_or(NONE) == NONE {
-        let profile = match opt.example.as_ref().or_else(|| opt.bin.as_ref()) {
-            Some(_) => "release",
-            // tests use the bench profile in release mode.
-            _ => "bench",
-        };
-
+    if debug_level.unwrap_or(NONE) == NONE {
         eprintln!("\nWARNING: profiling without debuginfo. Enable symbol information by adding the following lines to Cargo.toml:\n");
-        eprintln!("[profile.{}]", profile);
+        eprintln!("[profile.{}]", opt.profile.as_ref().unwrap());
         eprintln!("debug = true\n");
         eprintln!("Or set this environment variable:\n");
-        eprintln!("CARGO_PROFILE_{}_DEBUG=true\n", profile.to_uppercase());
+        eprintln!("CARGO_PROFILE_{}_DEBUG=true\n", opt.profile.as_ref().unwrap().to_uppercase());
     }
 
     let mut command = Vec::with_capacity(1 + opt.trailing_arguments.len());
@@ -364,6 +343,18 @@ fn main() -> anyhow::Result<()> {
     } else {
         Vec::new()
     };
+
+    opt.profile = Some(
+        if let Some(profile) = opt.profile {
+            profile // prefer cli supplied profile
+        // } else if opt.bench.is_some() {
+        //     "bench".to_string()
+        // } else if opt.unit_test.is_some() || opt.test.is_some() {
+        //     "test".to_string()
+        } else {
+            "bench".to_string() // default to `bench` profile
+        }
+    );
 
     let artifacts = build(&opt, kind)?;
     let workload = workload(&opt, &artifacts)?;

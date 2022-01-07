@@ -77,12 +77,11 @@ flamegraph [-o my_flamegraph.svg] /path/to/my/binary --my-arg 5
 flamegraph --no-inline [-o my_flamegraph.svg] /path/to/my/binary --my-arg 5
 
 # cargo support provided through the cargo-flamegraph binary!
-# defaults to profiling cargo run --release
+# defaults to profiling cargo run --profile bench
 cargo flamegraph
 
-# by default, `--release` profile is used,
-# but you can override this:
-cargo flamegraph --dev
+# by default the `bench` profile is used, but you can override this:
+cargo flamegraph --profile dev
 
 # if you'd like to profile a specific binary:
 cargo flamegraph --bin=stress2
@@ -96,8 +95,7 @@ cargo flamegraph -- my-command --my-arg my-value -m -f
 cargo flamegraph -c "record -e branch-misses -c 100 --call-graph lbr -g"
 
 # Run criterion benchmark
-# Note that the last --bench is required for `criterion 0.3` to run in benchmark mode, instead of test mode.
-cargo flamegraph --bench some_benchmark --features some_features -- --bench`
+cargo flamegraph --bench some_benchmark --features some_features`
 
 cargo flamegraph --example some_example --features some_features
 
@@ -114,46 +112,99 @@ cargo flamegraph --unit-test --dev test::may::omit::separator::if::unit::test::f
 
 ```
 USAGE:
-    cargo-flamegraph flamegraph [FLAGS] [OPTIONS] [trailing-arguments]...
-
-FLAGS:
-        --deterministic          Colors are selected such that the color of a function does not change between runs
-        --dev                    Build with the dev profile
-        --flamechart             Produce a flame chart (sort by time, do not merge stacks)
-    -h, --help                   Prints help information
-    -i, --inverted               Plot the flame graph up-side-down
-        --no-default-features    Disable default features
-        --open                   Open the output .svg file with default program
-        --reverse                Generate stack-reversed flame graph
-        --root                   Run with root privileges (using `sudo`)
-        --no-inline              Disable inlining for perf script because of performance issues
-    -V, --version                Prints version information
-    -v, --verbose                Print extra output to help debug problems
-
-OPTIONS:
-        --bench <bench>                    Benchmark to run
-    -b, --bin <bin>                        Binary to run
-    -c, --cmd <custom-cmd>                 Custom command for invoking perf/dtrace
-        --example <example>                Example to run
-    -f, --features <features>              Build features to enable
-    -F, --freq <frequency>                 Sampling frequency
-        --image-width <image-width>        Image width in pixels
-        --manifest-path <manifest-path>    Path to Cargo.toml
-        --min-width <FLOAT>                Omit functions smaller than <FLOAT> pixels [default: 0.01]
-        --notes <STRING>                   Set embedded notes in SVG
-    -o, --output <output>                  Output file, flamegraph.svg if not present
-    -p, --package <package>                package with the binary to run
-        --palette <palette>                Color palette [possible values: hot, mem, io, red, green, blue, aqua, yellow,
-                                           purple, orange, wakeup, java, perl, js, rust]
-        --skip-after <skip-after>          
-        --test <test>                      Test binary to run (currently profiles the test harness and all tests in the
-                                           binary)
-        --unit-test <unit-test>            Crate target to unit test, <unit-test> may be omitted if crate only has one
-                                           target (currently profiles the test harness and all tests in the binary; test
-                                           selection can be passed as trailing arguments after `--` as separator)
+    cargo-flamegraph [OPTIONS] [-- <TRAILING_ARGUMENTS>...]
 
 ARGS:
-    <trailing-arguments>...    Trailing arguments are passed to the binary being profiled
+    <TRAILING_ARGUMENTS>...    Trailing arguments passed to the binary being profiled
+
+OPTIONS:
+    -b, --bin <BIN>
+            Binary to run
+
+        --bench <BENCH>
+            Benchmark to run
+
+    -c, --cmd <CUSTOM_CMD>
+            Custom command for invoking perf/dtrace
+
+        --deterministic
+            Colors are selected such that the color of a function does not change between runs
+
+        --example <EXAMPLE>
+            Example to run
+
+    -f, --features <FEATURES>
+            Build features to enable
+
+    -F, --freq <FREQUENCY>
+            Sampling frequency
+
+        --flamechart
+            Produce a flame chart (sort by time, do not merge stacks)
+
+    -h, --help
+            Print help information
+
+    -i, --inverted
+            Plot the flame graph up-side-down
+
+        --image-width <IMAGE_WIDTH>
+            Image width in pixels
+
+        --manifest-path <MANIFEST_PATH>
+            Path to Cargo.toml
+
+        --min-width <FLOAT>
+            Omit functions smaller than <FLOAT> pixels [default: 0.01]
+
+        --no-default-features
+            Disable default features
+
+        --no-inline
+            Disable inlining for perf script because of performance issues
+
+        --notes <STRING>
+            Set embedded notes in SVG
+
+    -o, --output <OUTPUT>
+            Output file [default: flamegraph.svg]
+
+        --open
+            Open the output .svg file with default program
+
+    -p, --package <PACKAGE>
+            package with the binary to run
+
+        --palette <PALETTE>
+            Color palette [possible values: hot, mem, io, red, green, blue, aqua, yellow, purple,
+            orange, wakeup, java, perl, js, rust]
+
+        --profile <PROFILE>
+            Cargo profile to build with. Cargo has 4 built-in profiles: dev, release, test, and
+            bench
+
+        --reverse
+            Generate stack-reversed flame graph
+
+        --root
+            Run with root privileges (using `sudo`)
+
+        --skip-after <SKIP_AFTER>
+
+
+        --test <TEST>
+            Test binary to run (currently profiles the test harness and all tests in the binary)
+
+        --unit-test <UNIT_TEST>
+            Crate target to unit test, <unit-test> may be omitted if crate only has one target
+            (currently profiles the test harness and all tests in the binary; test selection can be
+            passed as trailing arguments after `--` as separator)
+
+    -v, --verbose
+            Print extra output to help debug problems
+
+    -V, --version
+            Print version information
 ```
 
 Then open the resulting `flamegraph.svg` with a browser, because most image
@@ -180,34 +231,28 @@ will be run normally but the binary will get run as superuser.
 Be aware that if the binary being tested is user-aware, this does
 change its behaviour.
 
-## Improving output when running with `--release`
+## Improving output when running with optimized profiles
 
 Due to optimizations etc... sometimes the quality
 of the information presented in the flamegraph will
-suffer when profiling release builds.
+suffer when profiling optimized builds.
 
 To counter this to some extent, you may either set the following in your
 `Cargo.toml` file:
 
 ```
-[profile.release]
-debug = true
-```
-
-Or set the environment variable [CARGO_PROFILE_RELEASE_DEBUG=true](https://doc.rust-lang.org/cargo/reference/config.html#profilenamedebug).
-
-Please note that tests, unit tests and benchmarks use the `bench` profile in release mode (see [here](https://doc.rust-lang.org/cargo/reference/profiles.html#profile-selection)).
-
-
-## Usage with benchmarks
-
-In order to perf existing benchmarks, you should set up a few configs.
-Set the following in your `Cargo.toml` file to run benchmarks:
-
-```
 [profile.bench]
 debug = true
 ```
+
+Or set the environment variable [CARGO_PROFILE_BENCH_DEBUG=true](https://doc.rust-lang.org/cargo/reference/config.html#profilenamedebug).
+
+Note that the `bench` profile [inherits](https://doc.rust-lang.org/cargo/reference/profiles.html#bench)
+from the `release` profile (optimized), but does not effect `cargo install` or similar.
+
+Cargo has 4 built-in profiles: [dev, release, test, and bench](https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles).
+dev and test are `unoptimized + debuginfo` while release and bench are `optimized`.
+Custom profiles can also be used with `--profile`.
 
 
 ## Use custom paths for perf and dtrace
